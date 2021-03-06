@@ -1,5 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{SampleRate, Stream};
+use cpal::{BufferSize, SampleRate, Stream};
 use dasp_graph::{Buffer, Input, Node};
 use rtrb::Producer;
 use std::collections::VecDeque;
@@ -84,10 +84,19 @@ impl Sink {
             .supported_output_configs()
             .expect("error while querying configs");
         let supported_config = {
-            supported_configs_range
-                .next()
-                .expect("")
-                .with_sample_rate(SampleRate(48000))
+            let mut config = None;
+            for cfg in supported_configs_range {
+                if cfg.channels() != 1 {
+                    continue;
+                }
+
+                if let cpal::SupportedBufferSize::Range { min, max } = *cfg.buffer_size() {
+                    if min <= 64 && max >= 64 {
+                        config = Some(cfg);
+                    }
+                }
+            }
+            config.unwrap().with_sample_rate(SampleRate(48000))
         };
 
         let config = supported_config.config();
