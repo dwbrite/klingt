@@ -1,15 +1,16 @@
-use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{BufferSize, SampleRate, Stream};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{SampleFormat, SampleRate, Stream};
 use dasp_graph::{Buffer, Input, Node};
 use rtrb::Producer;
 use std::collections::VecDeque;
 
 #[cfg(test)]
 mod tests {
-    use crate::IO;
+    use crate::{Sink, IO};
     use cpal::SampleRate;
     use dasp_graph::NodeData;
-    use std::ops::IndexMut;
+    use petgraph::prelude::NodeIndex;
+    use std::ops::Index;
     use std::thread::sleep;
     use std::time::{Duration, Instant};
 
@@ -32,19 +33,31 @@ mod tests {
 
         let instant = Instant::now();
 
+        fn get_sink(g: &Graph, idx: NodeIndex<u32>) -> &Sink {
+            let n = g.index(idx);
+
+            match &n.node {
+                IO::Sink(s) => return s,
+                IO::Sine(_) => {
+                    panic!("i_out should definitely be a sink my guy.")
+                }
+            }
+        }
+
         // play for 5 seconds
         for _ in 0..(5 * (48000 / 64)) {
             p.process(&mut g, i_out);
 
-            let n = g.index_mut(i_out);
-            match &mut n.node {
-                IO::Sink(s) => {
-                    while s.buffer.slots() < 64 {
-                        sleep(Duration::from_micros(400));
-                    }
-                }
-                IO::Sine(_) => {}
+            let out = get_sink(&g, i_out);
+            while out.buffer.slots() < 64 {
+                sleep(Duration::from_micros(400));
             }
+        }
+
+        let out = get_sink(&g, i_out);
+        // sleep until the buffer is empty.
+        while out.buffer.slots() < out.buffer.buffer().capacity() {
+            sleep(Duration::from_micros(100));
         }
 
         println!("time: {:?}", instant.elapsed());
@@ -54,7 +67,7 @@ mod tests {
 }
 
 // TODO: docs, explain how you can do this too at a higher level
-enum IO {
+pub enum IO {
     Sink(Sink),
     Sine(Sine),
 }
@@ -72,31 +85,26 @@ pub struct Sink {
     _stream: Stream,
     buffer: Producer<f32>,
 }
-
 impl Sink {
     pub fn default() -> Self {
         let host = cpal::default_host();
+
         let device = host
             .default_output_device()
             .expect("no output device available");
 
+        println!("device: {:?}", device.name().unwrap());
+
         let mut supported_configs_range = device
             .supported_output_configs()
             .expect("error while querying configs");
-        let supported_config = {
-            let mut config = None;
-            for cfg in supported_configs_range {
-                if cfg.channels() != 1 {
-                    continue;
-                }
 
-                if let cpal::SupportedBufferSize::Range { min, max } = *cfg.buffer_size() {
-                    if min <= 64 && max >= 64 {
-                        config = Some(cfg);
-                    }
-                }
-            }
-            config.unwrap().with_sample_rate(SampleRate(48000))
+        let fmt;
+        let supported_config = {
+            let cfg = supported_configs_range.next().unwrap();
+
+            fmt = cfg.sample_format();
+            cfg.with_sample_rate(SampleRate(48000))
         };
 
         let config = supported_config.config();
@@ -107,23 +115,77 @@ impl Sink {
         // try using chunks with a smaller ringbuffer?
         let (producer, mut consumer) = rtrb::RingBuffer::new(4096).split();
 
-        let stream = device
-            .build_output_stream::<f32, _, _>(
-                &config,
-                move |data, _| {
-                    data.iter_mut().for_each(|d| {
-                        *d = consumer.pop().unwrap_or(0f32);
-                    });
-                },
-                move |err| {
-                    println!("{:?}", err);
-                },
-            )
-            .expect("you were fucked from the start.");
+        let channels = config.channels as usize;
 
-        Self {
-            _stream: stream,
-            buffer: producer,
+        match fmt {
+            SampleFormat::I16 => {
+                let _stream = device
+                    .build_output_stream::<i16, _, _>(
+                        &config,
+                        move |data, _| {
+                            for chunk in data.chunks_mut(channels) {
+                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
+                                chunk.iter_mut().for_each(|d| {
+                                    *d = v;
+                                })
+                            }
+                        },
+                        move |err| {
+                            println!("{:?}", err);
+                        },
+                    )
+                    .expect("you were fucked from the start.");
+
+                Self {
+                    _stream,
+                    buffer: producer,
+                }
+            }
+            SampleFormat::U16 => {
+                let _stream = device
+                    .build_output_stream::<u16, _, _>(
+                        &config,
+                        move |data, _| {
+                            for chunk in data.chunks_mut(channels) {
+                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
+                                chunk.iter_mut().for_each(|d| {
+                                    *d = v;
+                                })
+                            }
+                        },
+                        move |err| {
+                            println!("{:?}", err);
+                        },
+                    )
+                    .expect("you were fucked from the start.");
+
+                Self {
+                    _stream,
+                    buffer: producer,
+                }
+            }
+            SampleFormat::F32 => {
+                let _stream = device
+                    .build_output_stream::<f32, _, _>(
+                        &config,
+                        move |data, _| {
+                            for chunk in data.chunks_mut(channels) {
+                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
+                                chunk.iter_mut().for_each(|d| {
+                                    *d = v;
+                                })
+                            }
+                        },
+                        move |err| {
+                            println!("{:?}", err);
+                        },
+                    )
+                    .expect("you were fucked from the start.");
+                Self {
+                    _stream,
+                    buffer: producer,
+                }
+            }
         }
     }
 }
@@ -139,6 +201,7 @@ impl Node for Sink {
                 self.buffer.push(sample).expect("👀");
             }
         }
+        self._stream.play().expect("smh");
     }
 }
 
@@ -147,7 +210,7 @@ pub struct Sine {
 }
 
 impl Sine {
-    fn new(sample_rate: cpal::SampleRate, frequency: u16) -> Sine {
+    pub fn new(sample_rate: cpal::SampleRate, frequency: u16) -> Sine {
         let cycle_time = 1.0 / frequency as f32;
         let total_samples = (sample_rate.0 as f32 * cycle_time) as usize;
 
