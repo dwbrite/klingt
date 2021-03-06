@@ -3,11 +3,13 @@ use cpal::{SampleFormat, SampleRate, Stream};
 use dasp_graph::{Buffer, Input, Node};
 use rtrb::Producer;
 use std::collections::VecDeque;
+use std::iter::Sum;
 
 #[cfg(test)]
 mod tests {
     use crate::{Sink, IO};
     use cpal::SampleRate;
+    use dasp_graph::node::Sum;
     use dasp_graph::NodeData;
     use petgraph::prelude::NodeIndex;
     use std::ops::Index;
@@ -16,6 +18,34 @@ mod tests {
 
     type Graph = petgraph::graph::Graph<NodeData<IO>, ()>;
     type Processor = dasp_graph::Processor<Graph>;
+
+    fn get_sink(g: &Graph, idx: NodeIndex<u32>) -> &Sink {
+        let n = g.index(idx);
+
+        match &n.node {
+            IO::Sink(s) => return s,
+            _ => {
+                panic!("i_out should definitely be a sink my guy.")
+            }
+        }
+    }
+
+    fn play(p: &mut Processor, g: &mut Graph, endpoint: NodeIndex, secs: f32) {
+        for _ in 0..(secs * (48000 as f32 / 64 as f32)) as usize {
+            p.process(g, endpoint);
+
+            let out = get_sink(g, endpoint);
+            while out.buffer.slots() < 64 {
+                sleep(Duration::from_micros(400));
+            }
+        }
+
+        let out = get_sink(&g, endpoint);
+        // sleep until the buffer is empty.
+        while out.buffer.slots() < out.buffer.buffer().capacity() {
+            sleep(Duration::from_micros(100));
+        }
+    }
 
     #[test]
     fn sine_5s() {
@@ -32,33 +62,38 @@ mod tests {
         sleep(Duration::from_millis(500));
 
         let instant = Instant::now();
+        play(&mut p, &mut g, i_out, 5.0);
+        println!("time: {:?}", instant.elapsed());
+    }
 
-        fn get_sink(g: &Graph, idx: NodeIndex<u32>) -> &Sink {
-            let n = g.index(idx);
+    #[test]
+    fn sine_mix() {
+        let sink = crate::Sink::default();
+        let sine_a = crate::Sine::new(SampleRate(48000), 480);
+        let sine_b = crate::Sine::new(SampleRate(48000), 690);
 
-            match &n.node {
-                IO::Sink(s) => return s,
-                IO::Sine(_) => {
-                    panic!("i_out should definitely be a sink my guy.")
-                }
-            }
-        }
+        let mut g = Graph::with_capacity(64, 64);
+        let mut p = Processor::with_capacity(64);
 
-        // play for 5 seconds
-        for _ in 0..(5 * (48000 / 64)) {
-            p.process(&mut g, i_out);
+        let i_a = g.add_node(NodeData::new1(IO::Sine(sine_a)));
+        let i_b = g.add_node(NodeData::new1(IO::Sine(sine_b)));
+        let i_out = g.add_node(NodeData::new1(IO::Sink(sink)));
+        let i_mix = g.add_node(NodeData::new1(IO::Sum(Sum)));
+        let temp_edge = g.add_edge(i_a, i_out, ());
 
-            let out = get_sink(&g, i_out);
-            while out.buffer.slots() < 64 {
-                sleep(Duration::from_micros(400));
-            }
-        }
+        sleep(Duration::from_millis(500));
 
-        let out = get_sink(&g, i_out);
-        // sleep until the buffer is empty.
-        while out.buffer.slots() < out.buffer.buffer().capacity() {
-            sleep(Duration::from_micros(100));
-        }
+        let instant = Instant::now();
+        // play the first sine wave
+        play(&mut p, &mut g, i_out, 2.5);
+
+        g.add_edge(i_a, i_mix, ());
+        g.add_edge(i_b, i_mix, ());
+        g.add_edge(i_mix, i_out, ());
+
+        g.remove_edge(temp_edge);
+
+        play(&mut p, &mut g, i_out, 2.5);
 
         println!("time: {:?}", instant.elapsed());
 
@@ -70,6 +105,7 @@ mod tests {
 pub enum IO {
     Sink(Sink),
     Sine(Sine),
+    Sum(dasp_graph::node::Sum),
 }
 
 impl Node for IO {
@@ -77,6 +113,7 @@ impl Node for IO {
         match self {
             IO::Sink(s) => s.process(inputs, output),
             IO::Sine(s) => s.process(inputs, output),
+            IO::Sum(s) => s.process(inputs, output),
         }
     }
 }
@@ -248,4 +285,4 @@ impl Node for Sine {
 
 // TODO: benchmark
 
-// TODO: buffered sources, mixing, seeking (on seekable sources?), {mono/stereo/3d audio, hrtf, doppler}
+// TODO: buffered sources, seeking (on seekable sources?), {mono/stereo/3d audio, hrtf, doppler}
