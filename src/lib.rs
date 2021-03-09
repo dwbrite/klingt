@@ -1,13 +1,19 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, SampleRate, Stream};
+mod nodes;
+
+use crate::nodes::sink::CpalMonoSink;
+use crate::nodes::source::Sine;
+
 use dasp_graph::{Buffer, Input, Node};
-use rtrb::Producer;
-use std::collections::VecDeque;
-use std::iter::{Cycle, Repeat, Sum};
+
+
+
 
 #[cfg(test)]
 mod tests {
-    use crate::{Sink, IO};
+    use crate::nodes::sink::CpalMonoSink;
+    use crate::IO;
+
+    use crate::nodes::source::Sine;
     use cpal::SampleRate;
     use dasp_graph::node::Sum;
     use dasp_graph::NodeData;
@@ -19,7 +25,7 @@ mod tests {
     type Graph = petgraph::graph::Graph<NodeData<IO>, ()>;
     type Processor = dasp_graph::Processor<Graph>;
 
-    fn get_sink(g: &Graph, idx: NodeIndex<u32>) -> &Sink {
+    fn get_sink(g: &Graph, idx: NodeIndex<u32>) -> &CpalMonoSink {
         let n = g.index(idx);
 
         match &n.node {
@@ -49,8 +55,8 @@ mod tests {
 
     #[test]
     fn sine_5s() {
-        let sink = crate::Sink::default();
-        let sine = crate::Sine::new(SampleRate(48000), 480);
+        let sink = CpalMonoSink::default();
+        let sine = Sine::new(SampleRate(48000), 480);
 
         let mut g = Graph::with_capacity(64, 64);
         let mut p = Processor::with_capacity(64);
@@ -68,9 +74,9 @@ mod tests {
 
     #[test]
     fn sine_mix() {
-        let sink = crate::Sink::default();
-        let sine_a = crate::Sine::new(SampleRate(48000), 480);
-        let sine_b = crate::Sine::new(SampleRate(48000), 690);
+        let sink = CpalMonoSink::default();
+        let sine_a = Sine::new(SampleRate(48000), 480);
+        let sine_b = Sine::new(SampleRate(48000), 690);
 
         let mut g = Graph::with_capacity(64, 64);
         let mut p = Processor::with_capacity(64);
@@ -103,7 +109,7 @@ mod tests {
 
 // TODO: docs, explain how you can do this too at a higher level
 pub enum IO {
-    Sink(Sink),
+    Sink(CpalMonoSink),
     Sine(Sine),
     Sum(dasp_graph::node::Sum),
 }
@@ -114,183 +120,6 @@ impl Node for IO {
             IO::Sink(s) => s.process(inputs, output),
             IO::Sine(s) => s.process(inputs, output),
             IO::Sum(s) => s.process(inputs, output),
-        }
-    }
-}
-
-pub struct Sink {
-    _stream: Stream,
-    buffer: Producer<f32>,
-}
-impl Sink {
-    pub fn default() -> Self {
-        let host = cpal::default_host();
-
-        let device = host
-            .default_output_device()
-            .expect("no output device available");
-
-        println!("device: {:?}", device.name().unwrap());
-
-        let mut supported_configs_range = device
-            .supported_output_configs()
-            .expect("error while querying configs");
-
-        let fmt;
-        let supported_config = {
-            let cfg = supported_configs_range.next().unwrap();
-
-            fmt = cfg.sample_format();
-            cfg.with_sample_rate(SampleRate(48000))
-        };
-
-        let config = supported_config.config();
-
-        println!("config: {:?}", config);
-
-        // TODO: figure out why the ringbuffer needs to be so large in order to consume audio fast enough.
-        // try using chunks with a smaller ringbuffer?
-        let (producer, mut consumer) = rtrb::RingBuffer::new(4096).split();
-
-        let channels = config.channels as usize;
-
-        match fmt {
-            SampleFormat::I16 => {
-                let _stream = device
-                    .build_output_stream::<i16, _, _>(
-                        &config,
-                        move |data, _| {
-                            for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
-                                chunk.iter_mut().for_each(|d| {
-                                    *d = v;
-                                })
-                            }
-                        },
-                        move |err| {
-                            println!("{:?}", err);
-                        },
-                    )
-                    .expect("you were fucked from the start.");
-
-                Self {
-                    _stream,
-                    buffer: producer,
-                }
-            }
-            SampleFormat::U16 => {
-                let _stream = device
-                    .build_output_stream::<u16, _, _>(
-                        &config,
-                        move |data, _| {
-                            for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
-                                chunk.iter_mut().for_each(|d| {
-                                    *d = v;
-                                })
-                            }
-                        },
-                        move |err| {
-                            println!("{:?}", err);
-                        },
-                    )
-                    .expect("you were fucked from the start.");
-
-                Self {
-                    _stream,
-                    buffer: producer,
-                }
-            }
-            SampleFormat::F32 => {
-                let _stream = device
-                    .build_output_stream::<f32, _, _>(
-                        &config,
-                        move |data, _| {
-                            for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
-                                chunk.iter_mut().for_each(|d| {
-                                    *d = v;
-                                })
-                            }
-                        },
-                        move |err| {
-                            println!("{:?}", err);
-                        },
-                    )
-                    .expect("you were fucked from the start.");
-                Self {
-                    _stream,
-                    buffer: producer,
-                }
-            }
-        }
-    }
-}
-
-impl Node for Sink {
-    fn process(&mut self, inputs: &[Input], _output: &mut [Buffer]) {
-        if inputs.len() != 1 {
-            panic!("a sink can only have one input. try mixing first.")
-        }
-
-        for buffer in inputs.first().unwrap().buffers() {
-            for &sample in buffer.iter() {
-                self.buffer.push(sample).expect("👀");
-            }
-        }
-        self._stream.play().expect("smh");
-    }
-}
-
-pub struct Sine {
-    data: Vec<f32>,
-    idx: usize,
-}
-
-impl Sine {
-    pub fn new(sample_rate: cpal::SampleRate, frequency: u16) -> Sine {
-        let cycle_time = 1.0 / frequency as f32;
-        let total_samples = (sample_rate.0 as f32 * cycle_time) as usize;
-
-        let mut data = Vec::<f32>::with_capacity(total_samples);
-
-        for i in 0..total_samples {
-            let pi = std::f32::consts::PI;
-            let percent = (i as f32) / total_samples as f32;
-            let rad_percent = percent * (2.0 * pi);
-            let v = rad_percent.sin();
-
-            data.push(v);
-        }
-
-        Sine { data, idx: 0 }
-    }
-}
-
-impl Iterator for Sine {
-    type Item = f32;
-
-    #[inline]
-    fn next(&mut self) -> Option<f32> {
-        match self.data.get(self.idx) {
-            Some(v) => {
-                self.idx += 1;
-                Some(*v)
-            }
-            None => {
-                self.idx = 0;
-                self.next()
-            }
-        }
-    }
-}
-
-impl Node for Sine {
-    fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
-        for buffer in output.iter_mut() {
-            for sample in buffer.iter_mut() {
-                *sample = self.next().unwrap();
-            }
         }
     }
 }
