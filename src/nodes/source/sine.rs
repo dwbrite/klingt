@@ -1,5 +1,4 @@
 use dasp_graph::{Buffer, Input, Node};
-use std::ops::DerefMut;
 
 pub struct Sine {
     data: Vec<f32>,
