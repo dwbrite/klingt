@@ -3,7 +3,7 @@ use cpal::{SampleFormat, SampleRate, Stream};
 use dasp_graph::{Buffer, Input, Node};
 use rtrb::Producer;
 use std::collections::VecDeque;
-use std::iter::Sum;
+use std::iter::{Cycle, Repeat, Sum};
 
 #[cfg(test)]
 mod tests {
@@ -243,7 +243,8 @@ impl Node for Sink {
 }
 
 pub struct Sine {
-    data: VecDeque<f32>,
+    data: Vec<f32>,
+    idx: usize,
 }
 
 impl Sine {
@@ -251,7 +252,7 @@ impl Sine {
         let cycle_time = 1.0 / frequency as f32;
         let total_samples = (sample_rate.0 as f32 * cycle_time) as usize;
 
-        let mut data = VecDeque::<f32>::with_capacity(total_samples);
+        let mut data = Vec::<f32>::with_capacity(total_samples);
 
         for i in 0..total_samples {
             let pi = std::f32::consts::PI;
@@ -259,17 +260,28 @@ impl Sine {
             let rad_percent = percent * (2.0 * pi);
             let v = rad_percent.sin();
 
-            data.push_back(v);
+            data.push(v);
         }
 
-        Sine { data }
+        Sine { data, idx: 0 }
     }
+}
+
+impl Iterator for Sine {
+    type Item = f32;
 
     #[inline]
-    fn next(&mut self) -> f32 {
-        let a = self.data.pop_front().unwrap();
-        self.data.push_back(a);
-        a
+    fn next(&mut self) -> Option<f32> {
+        match self.data.get(self.idx) {
+            Some(v) => {
+                self.idx += 1;
+                Some(*v)
+            }
+            None => {
+                self.idx = 0;
+                self.next()
+            }
+        }
     }
 }
 
@@ -277,7 +289,7 @@ impl Node for Sine {
     fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
         for buffer in output.iter_mut() {
             for sample in buffer.iter_mut() {
-                *sample = self.next();
+                *sample = self.next().unwrap();
             }
         }
     }
