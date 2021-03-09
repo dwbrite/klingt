@@ -1,4 +1,5 @@
 use dasp_graph::{Buffer, Input, Node};
+use std::ops::DerefMut;
 
 pub struct Sine {
     data: Vec<f32>,
@@ -23,23 +24,13 @@ impl Sine {
 
         Sine { data, idx: 0 }
     }
-}
-
-impl Iterator for Sine {
-    type Item = f32;
 
     #[inline]
-    fn next(&mut self) -> Option<f32> {
-        match self.data.get(self.idx) {
-            Some(v) => {
-                self.idx += 1;
-                Some(*v)
-            }
-            None => {
-                self.idx = 0;
-                self.next()
-            }
+    fn next(&mut self) -> f32 {
+        if self.idx >= self.data.len() {
+            self.idx = 0;
         }
+        self.data[self.idx]
     }
 }
 
@@ -47,7 +38,7 @@ impl Node for Sine {
     fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
         for buffer in output.iter_mut() {
             for sample in buffer.iter_mut() {
-                *sample = self.next().unwrap();
+                *sample = self.next();
             }
         }
     }

@@ -5,7 +5,7 @@ use rtrb::Producer;
 
 pub struct CpalMonoSink {
     _stream: Stream,
-    pub(crate) buffer: Producer<f32>,
+    pub buffer: Producer<f32>,
 }
 
 impl CpalMonoSink {
