@@ -1,8 +1,9 @@
 use cpal::SampleRate;
 use dasp_graph::node::Sum;
 use dasp_graph::NodeData;
+use klingt::nodes::effect::SlewLimiter;
 use klingt::nodes::sink::CpalMonoSink;
-use klingt::nodes::source::Sine;
+use klingt::nodes::source::{Sine, Square};
 use klingt::IO;
 use petgraph::prelude::NodeIndex;
 use std::ops::Index;
@@ -89,6 +90,33 @@ fn sine_mix() {
     play(&mut p, &mut g, i_out, 2.5);
 
     println!("time: {:?}", instant.elapsed());
+}
 
-    assert_eq!(2 + 2, 4);
+#[test]
+fn square_slewed() {
+    let sink = CpalMonoSink::default();
+    let sqr = Square::new(SampleRate(48000), 480);
+    let slew = SlewLimiter::new();
+
+    let mut g = Graph::with_capacity(64, 64);
+    let mut p = Processor::with_capacity(64);
+
+    let i_in = g.add_node(NodeData::new1(IO::Square(sqr)));
+    let i_fx = g.add_node(NodeData::new1(IO::SlewLim(slew)));
+    let i_out = g.add_node(NodeData::new1(IO::Sink(sink)));
+    let i_edge = g.add_edge(i_in, i_out, ());
+
+    let instant = Instant::now();
+    play(&mut p, &mut g, i_out, 2.5);
+
+    sleep(Duration::from_millis(500));
+
+    g.remove_edge(i_edge);
+
+    g.add_edge(i_in, i_fx, ());
+    g.add_edge(i_fx, i_out, ());
+
+    play(&mut p, &mut g, i_out, 2.5);
+
+    println!("time: {:?}", instant.elapsed());
 }

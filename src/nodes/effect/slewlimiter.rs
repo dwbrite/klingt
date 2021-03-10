@@ -10,8 +10,8 @@ impl SlewLimiter {
     // TODO: parameterize sample rate, channels, calculate delta
     pub fn new() -> Self {
         SlewLimiter {
-            channels_last_ptr: [0f32; 2].as_mut_ptr(),
-            channels_last_len: 2,
+            channels_last_ptr: [0f32; 5].as_mut_ptr(),
+            channels_last_len: 5,
         }
     }
 }
@@ -32,12 +32,10 @@ impl Node for SlewLimiter {
                     // TODO: better math
                     let last = slice[channel];
                     let delta = i - last;
+                    let min_per_sample = 1_f32 / 16_f32;
 
-                    if delta.abs() > (1f32 / 3072_f32) {
-                        *o = last + delta.abs().copysign(delta);
-                    } else {
-                        *o = *i;
-                    }
+                    *o = last + delta.abs().min(min_per_sample).copysign(delta);
+                    slice[channel] = *o;
                 }
             }
         }

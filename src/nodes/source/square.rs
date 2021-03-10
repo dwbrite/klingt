@@ -1,21 +1,16 @@
 use dasp_graph::{Buffer, Input, Node};
-use std::collections::VecDeque;
 
-struct _Chunk {
-    data: [f32; 64],
-}
-
-pub struct Sine {
+pub struct Square {
     data: Vec<f32>,
     idx: usize,
 }
 
-impl Sine {
-    pub fn new(sample_rate: cpal::SampleRate, frequency: u16) -> Sine {
+impl Square {
+    pub fn new(sample_rate: cpal::SampleRate, frequency: u16) -> Self {
         let cycle_time = 1.0 / frequency as f32;
         let total_samples = (sample_rate.0 as f32 * cycle_time) as usize;
 
-        let mut data = Vec::<f32>::new();
+        let mut data = Vec::<f32>::with_capacity(total_samples);
 
         for i in 0..total_samples {
             let pi = std::f32::consts::PI;
@@ -23,14 +18,14 @@ impl Sine {
             let rad_percent = percent * (2.0 * pi);
             let v = rad_percent.sin();
 
-            data.push(v);
+            data.push(0.1_f32.copysign(v));
         }
 
-        Sine { data, idx: 0 }
+        Self { data, idx: 0 }
     }
 }
 
-impl Iterator for Sine {
+impl Iterator for Square {
     type Item = f32;
 
     #[inline]
@@ -48,7 +43,7 @@ impl Iterator for Sine {
     }
 }
 
-impl Node for Sine {
+impl Node for Square {
     fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
         for buffer in output.iter_mut() {
             for sample in buffer.iter_mut() {
