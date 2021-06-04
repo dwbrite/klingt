@@ -1,15 +1,15 @@
 use crate::AudioNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, SampleRate, Stream};
+use cpal::{Sample, SampleFormat, SampleRate, Stream};
 use dasp_graph::{Buffer, Input, Node};
 use rtrb::Producer;
 
-pub struct CpalMonoSink {
+pub struct CpalStereoSink {
     _stream: Stream,
-    pub buffer: Producer<f32>,
+    pub buffer: Producer<(f32, f32)>,
 }
 
-impl CpalMonoSink {
+impl CpalStereoSink {
     pub fn default() -> Self {
         let host = cpal::default_host();
 
@@ -25,7 +25,11 @@ impl CpalMonoSink {
 
         let fmt;
         let supported_config = {
-            let cfg = supported_configs_range.next().unwrap();
+            let mut cfg = supported_configs_range.next().unwrap();
+
+            while cfg.channels() != 2 {
+                cfg = supported_configs_range.next().unwrap();
+            }
 
             fmt = cfg.sample_format();
             cfg.with_sample_rate(SampleRate(48000))
@@ -48,10 +52,14 @@ impl CpalMonoSink {
                         &config,
                         move |data, _| {
                             for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
-                                chunk.iter_mut().for_each(|d| {
-                                    *d = v;
-                                })
+                                let (l, r) = &consumer.pop().unwrap_or((0f32, 0f32));
+                                for (i, d) in chunk.iter_mut().enumerate() {
+                                    if i % 2 == 0 {
+                                        *d = Sample::from(l);
+                                    } else {
+                                        *d = Sample::from(r);
+                                    }
+                                }
                             }
                         },
                         move |err| {
@@ -71,10 +79,14 @@ impl CpalMonoSink {
                         &config,
                         move |data, _| {
                             for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
-                                chunk.iter_mut().for_each(|d| {
-                                    *d = v;
-                                })
+                                let (l, r) = &consumer.pop().unwrap_or((0f32, 0f32));
+                                for (i, d) in chunk.iter_mut().enumerate() {
+                                    if i % 2 == 0 {
+                                        *d = Sample::from(l);
+                                    } else {
+                                        *d = Sample::from(r);
+                                    }
+                                }
                             }
                         },
                         move |err| {
@@ -94,10 +106,14 @@ impl CpalMonoSink {
                         &config,
                         move |data, _| {
                             for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
-                                chunk.iter_mut().for_each(|d| {
-                                    *d = v;
-                                })
+                                let (l, r) = &consumer.pop().unwrap_or((0f32, 0f32));
+                                for (i, d) in chunk.iter_mut().enumerate() {
+                                    if i % 2 == 0 {
+                                        *d = Sample::from(l);
+                                    } else {
+                                        *d = Sample::from(r);
+                                    }
+                                }
                             }
                         },
                         move |err| {
@@ -105,6 +121,7 @@ impl CpalMonoSink {
                         },
                     )
                     .expect("you were fucked from the start.");
+
                 Self {
                     _stream,
                     buffer: producer,
@@ -114,17 +131,17 @@ impl CpalMonoSink {
     }
 }
 
-impl AudioNode for CpalMonoSink {
+impl AudioNode for CpalStereoSink {
     fn process_inner(&mut self, inputs: &[Input], _output: &mut [Buffer]) {
         if inputs.len() != 1 {
             panic!("a sink can only have one input. try mixing first.")
         }
 
-        for buffer in inputs.first().unwrap().buffers() {
-            for &sample in buffer.iter() {
-                self.buffer.push(sample).expect("👀");
-            }
+        let buffers = inputs.first().unwrap().buffers();
+        for (&l, &r) in buffers[0].iter().zip(buffers[1].iter()) {
+            self.buffer.push((l, r)).expect("👀");
         }
+
         self._stream.play().expect("smh");
     }
 }

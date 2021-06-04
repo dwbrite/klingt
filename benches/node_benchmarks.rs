@@ -3,9 +3,11 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use dasp_graph::{Buffer, Node, NodeData};
 use klingt::nodes::effect::SlewLimiter;
 use klingt::nodes::source::Sine;
-use klingt::IO;
 
-type Graph = petgraph::graph::Graph<NodeData<IO>, ()>;
+use klingt::AudioNode;
+use klingt::NodeVariants::*;
+
+type Graph = petgraph::graph::Graph<NodeData<klingt::NodeVariants>, ()>;
 type Processor = dasp_graph::Processor<Graph>;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
@@ -14,7 +16,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut output = [Buffer::default()];
         let input = [];
 
-        b.iter(move || source.process(&input, &mut output))
+        b.iter(move || source.process_inner(&input, &mut output))
     });
 
     c.bench_function("Sine.process(), integrated", |b| {
@@ -24,7 +26,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut g = Graph::with_capacity(64, 64);
         let mut p = Processor::with_capacity(64);
 
-        let i_in = g.add_node(NodeData::new1(IO::Sine(sine)));
+        let i_in = g.add_node(NodeData::new1(Sine(sine)));
 
         b.iter(move || p.process(&mut g, i_in))
     });
@@ -36,8 +38,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut g = Graph::with_capacity(64, 64);
         let mut p = Processor::with_capacity(64);
 
-        let i_in = g.add_node(NodeData::new1(IO::Sine(sine)));
-        let i_out = g.add_node(NodeData::new1(IO::SlewLim(slewlimiter)));
+        let i_in = g.add_node(NodeData::new1(Sine(sine)));
+        let i_out = g.add_node(NodeData::new1(SlewLimiter(slewlimiter)));
         g.add_edge(i_in, i_out.clone(), ());
 
         b.iter(move || p.process(&mut g, i_out))

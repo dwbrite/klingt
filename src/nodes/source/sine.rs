@@ -1,9 +1,6 @@
+use crate::AudioNode;
 use dasp_graph::{Buffer, Input, Node};
 use std::collections::VecDeque;
-
-struct _Chunk {
-    data: [f32; 64],
-}
 
 pub struct Sine {
     data: Vec<f32>,
@@ -48,8 +45,8 @@ impl Iterator for Sine {
     }
 }
 
-impl Node for Sine {
-    fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
+impl AudioNode for Sine {
+    fn process_inner(&mut self, _: &[Input], output: &mut [Buffer]) {
         for buffer in output.iter_mut() {
             for sample in buffer.iter_mut() {
                 *sample = self.next().unwrap();

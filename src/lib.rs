@@ -1,28 +1,36 @@
 pub mod nodes;
 
-use crate::nodes::sink::CpalMonoSink;
-use crate::nodes::source::{Sine, Square};
+use crate::nodes::sink::{CpalMonoSink, CpalStereoSink};
+use crate::nodes::source::{BufferedOgg, Sine, Square};
 
 use crate::nodes::effect::SlewLimiter;
 use dasp_graph::{Buffer, Input, Node};
+// pub use enum_dispatch::enum_dispatch;
 
-pub enum IO {
-    Sink(CpalMonoSink),
+use dasp_graph::node::Sum;
+
+#[cfg(not(feature = "custom_dispatch"))]
+#[impl_enum::with_methods {
+    fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]) {}
+}]
+pub enum NodeVariants {
+    CpalMonoSink(CpalMonoSink),
+    CpalStereoSink(CpalStereoSink),
     Sine(Sine),
     Square(Square),
-    Sum(dasp_graph::node::Sum),
-    SlewLim(SlewLimiter),
+    Sum(Sum),
+    SlewLimiter(SlewLimiter),
+    BufferedOgg(BufferedOgg),
 }
 
-impl Node for IO {
+pub trait AudioNode {
+    fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]);
+}
+
+#[cfg(not(feature = "custom_dispatch"))]
+impl Node for NodeVariants {
     fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {
-        match self {
-            IO::Sink(s) => s.process(inputs, output),
-            IO::Sine(s) => s.process(inputs, output),
-            IO::Sum(s) => s.process(inputs, output),
-            IO::SlewLim(s) => s.process(inputs, output),
-            IO::Square(s) => s.process(inputs, output),
-        }
+        self.process_inner(inputs, output);
     }
 }
 

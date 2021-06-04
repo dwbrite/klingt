@@ -1,3 +1,4 @@
+use crate::AudioNode;
 use dasp_graph::{Buffer, Input, Node};
 
 // TODO: find out if I'm doing myself any good by using a raw pointer instead of a smart pointer
@@ -14,8 +15,8 @@ impl SlewLimiter {
     }
 }
 
-impl Node for SlewLimiter {
-    fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {
+impl AudioNode for SlewLimiter {
+    fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]) {
         // Sum the inputs onto the output.
         for (channel, out_buffer) in output.iter_mut().enumerate() {
             // only accepts one input

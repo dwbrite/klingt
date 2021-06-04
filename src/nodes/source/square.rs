@@ -1,3 +1,4 @@
+use crate::AudioNode;
 use dasp_graph::{Buffer, Input, Node};
 
 pub struct Square {
@@ -43,8 +44,8 @@ impl Iterator for Square {
     }
 }
 
-impl Node for Square {
-    fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
+impl AudioNode for Square {
+    fn process_inner(&mut self, _: &[Input], output: &mut [Buffer]) {
         for buffer in output.iter_mut() {
             for sample in buffer.iter_mut() {
                 *sample = self.next().unwrap();
