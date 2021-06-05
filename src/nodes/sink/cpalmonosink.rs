@@ -115,7 +115,7 @@ impl CpalMonoSink {
 }
 
 impl AudioNode for CpalMonoSink {
-    fn process_inner(&mut self, inputs: &[Input], _output: &mut [Buffer]) {
+    fn process(&mut self, inputs: &[Input], _output: &mut [Buffer]) {
         if inputs.len() != 1 {
             panic!("a sink can only have one input. try mixing first.")
         }

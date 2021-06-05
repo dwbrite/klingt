@@ -16,7 +16,7 @@ impl SlewLimiter {
 }
 
 impl AudioNode for SlewLimiter {
-    fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]) {
+    fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {
         // Sum the inputs onto the output.
         for (channel, out_buffer) in output.iter_mut().enumerate() {
             // only accepts one input

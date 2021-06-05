@@ -16,7 +16,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut output = [Buffer::default()];
         let input = [];
 
-        b.iter(move || source.process_inner(&input, &mut output))
+        b.iter(move || source.process(&input, &mut output))
     });
 
     c.bench_function("Sine.process(), integrated", |b| {

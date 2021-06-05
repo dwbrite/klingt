@@ -9,9 +9,11 @@ use dasp_graph::{Buffer, Input, Node};
 
 use dasp_graph::node::Sum;
 
+pub use dasp_graph::Node as AudioNode;
+
 #[cfg(not(feature = "custom_dispatch"))]
 #[impl_enum::with_methods {
-    fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]) {}
+    fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {}
 }]
 pub enum NodeVariants {
     CpalMonoSink(CpalMonoSink),
@@ -23,14 +25,10 @@ pub enum NodeVariants {
     BufferedOgg(BufferedOgg),
 }
 
-pub trait AudioNode {
-    fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]);
-}
-
 #[cfg(not(feature = "custom_dispatch"))]
 impl Node for NodeVariants {
     fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {
-        self.process_inner(inputs, output);
+        self.process(inputs, output);
     }
 }
 

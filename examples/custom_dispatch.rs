@@ -11,7 +11,7 @@ type Graph = petgraph::graph::Graph<NodeData<NodeVariants>, ()>;
 type Processor = dasp_graph::Processor<Graph>;
 
 #[impl_enum::with_methods {
-fn process_inner(&mut self, inputs: &[Input], output: &mut [Buffer]) {}
+fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {}
 }]
 pub enum NodeVariants {
     CpalStereoSink(CpalStereoSink),
@@ -20,7 +20,7 @@ pub enum NodeVariants {
 
 impl Node for NodeVariants {
     fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {
-        self.process_inner(inputs, output);
+        self.process(inputs, output);
     }
 }
 

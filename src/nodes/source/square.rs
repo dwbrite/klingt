@@ -45,7 +45,7 @@ impl Iterator for Square {
 }
 
 impl AudioNode for Square {
-    fn process_inner(&mut self, _: &[Input], output: &mut [Buffer]) {
+    fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
         for buffer in output.iter_mut() {
             for sample in buffer.iter_mut() {
                 *sample = self.next().unwrap();

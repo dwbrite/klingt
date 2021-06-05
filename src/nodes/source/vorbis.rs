@@ -74,7 +74,7 @@ impl Clone for BufferedOgg {
 }
 
 impl AudioNode for BufferedOgg {
-    fn process_inner(&mut self, _: &[Input], output: &mut [Buffer]) {
+    fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
         for (ch, o) in output.iter_mut().enumerate() {
             for sample in o.iter_mut() {
                 *sample = self.next(ch);
