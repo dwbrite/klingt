@@ -1,7 +1,7 @@
 use crate::AudioNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, SampleRate, Stream};
-use dasp_graph::{Buffer, Input, Node};
+use dasp_graph::{Buffer, Input};
 use rtrb::Producer;
 
 pub struct CpalMonoSink {
@@ -48,7 +48,7 @@ impl CpalMonoSink {
                         &config,
                         move |data, _| {
                             for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
+                                let v = <dyn cpal::Sample>::from(&consumer.pop().unwrap_or(0f32));
                                 chunk.iter_mut().for_each(|d| {
                                     *d = v;
                                 })
@@ -57,6 +57,7 @@ impl CpalMonoSink {
                         move |err| {
                             println!("{:?}", err);
                         },
+                        None
                     )
                     .expect("you were fucked from the start.");
 
@@ -71,7 +72,7 @@ impl CpalMonoSink {
                         &config,
                         move |data, _| {
                             for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
+                                let v = <dyn cpal::Sample>::from(&consumer.pop().unwrap_or(0f32));
                                 chunk.iter_mut().for_each(|d| {
                                     *d = v;
                                 })
@@ -94,7 +95,7 @@ impl CpalMonoSink {
                         &config,
                         move |data, _| {
                             for chunk in data.chunks_mut(channels) {
-                                let v = cpal::Sample::from(&consumer.pop().unwrap_or(0f32));
+                                let v = <dyn cpal::Sample>::from(&consumer.pop().unwrap_or(0f32));
                                 chunk.iter_mut().for_each(|d| {
                                     *d = v;
                                 })

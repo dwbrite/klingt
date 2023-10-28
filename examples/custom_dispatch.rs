@@ -1,4 +1,4 @@
-use dasp_graph::{Buffer, Input, Node, NodeData};
+use dasp_graph::{Buffer, Input, NodeData};
 use klingt::nodes::sink::CpalStereoSink;
 use klingt::nodes::source::BufferedOgg;
 use klingt::AudioNode;
@@ -7,21 +7,19 @@ use std::ops::Index;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+use std::convert::TryInto;
+
 type Graph = petgraph::graph::Graph<NodeData<NodeVariants>, ()>;
 type Processor = dasp_graph::Processor<Graph>;
 
-#[impl_enum::with_methods {
-fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {}
-}]
+#[enum_delegate::implement(AudioNode,
+    pub trait AudioNode {
+        fn process(&mut self, inputs: &[Input], output: &mut [Buffer]);
+    }
+)]
 pub enum NodeVariants {
     CpalStereoSink(CpalStereoSink),
     BufferedOgg(BufferedOgg),
-}
-
-impl Node for NodeVariants {
-    fn process(&mut self, inputs: &[Input], output: &mut [Buffer]) {
-        self.process(inputs, output);
-    }
 }
 
 fn get_sink_stereo(g: &Graph, idx: NodeIndex<u32>) -> &CpalStereoSink {

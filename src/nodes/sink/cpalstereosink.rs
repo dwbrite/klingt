@@ -1,7 +1,7 @@
 use crate::AudioNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Sample, SampleFormat, SampleRate, Stream};
-use dasp_graph::{Buffer, Input, Node};
+use dasp_graph::{Buffer, Input};
 use rtrb::Producer;
 
 pub struct CpalStereoSink {
@@ -119,6 +119,7 @@ impl CpalStereoSink {
                         move |err| {
                             println!("{:?}", err);
                         },
+                        None
                     )
                     .expect("you were fucked from the start.");
 

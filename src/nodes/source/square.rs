@@ -1,5 +1,5 @@
 use crate::AudioNode;
-use dasp_graph::{Buffer, Input, Node};
+use dasp_graph::{Buffer, Input};
 
 pub struct Square {
     data: Vec<f32>,

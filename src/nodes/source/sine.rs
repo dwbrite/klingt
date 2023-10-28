@@ -1,6 +1,5 @@
 use crate::AudioNode;
-use dasp_graph::{Buffer, Input, Node};
-use std::collections::VecDeque;
+use dasp_graph::{Buffer, Input};
 
 pub struct Sine {
     data: Vec<f32>,

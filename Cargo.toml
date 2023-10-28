@@ -4,23 +4,19 @@ version = "0.1.0"
 authors = ["Devin Brite <devin@dwbrite.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[features]
-custom_dispatch = []
-default = []
-
 [dependencies]
-cpal = { version = "0.13.1" }
-lewton = "0.10.2"
-dasp_graph = { version = "0.11.0", features = ["node-sum"]}
-rtrb = "0.1.2"
+cpal = { version = "0.13.1" } # cross platform audio library
+
+dasp_graph = { version = "0.11.0", features = ["node-sum"]} # digital audio signal processing graph +
 petgraph = "0.5.1"
-impl-enum = "0.2.0"
+
+lewton = "0.10.2" # Vorbis decoder
+rtrb = "0.1.2" # real-time ring buffer
 
 [dev-dependencies]
 clang-sys = "0.29"
 criterion = "0.3.4"
+enum_delegate = "0.2.0"
 
 [[bench]]
 name = "node_benchmarks"
@@ -28,4 +24,3 @@ harness = false
 
 [[example]]
 name = "custom_dispatch"
-required-features = ["custom_dispatch"]

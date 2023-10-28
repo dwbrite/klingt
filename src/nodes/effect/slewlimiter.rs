@@ -1,5 +1,5 @@
 use crate::AudioNode;
-use dasp_graph::{Buffer, Input, Node};
+use dasp_graph::{Buffer, Input};
 
 // TODO: find out if I'm doing myself any good by using a raw pointer instead of a smart pointer
 pub struct SlewLimiter {
