@@ -1,7 +1,7 @@
 use crate::AudioNode;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Sample, SampleFormat, SampleRate, Stream};
-use dasp_graph::{Buffer, Input, Node};
+use dasp_graph::{Buffer, Input};
 use rtrb::Producer;
 
 pub struct CpalStereoSink {
@@ -19,17 +19,16 @@ impl CpalStereoSink {
 
         println!("device: {:?}", device.name().unwrap());
 
-        let mut supported_configs_range = device
+        let supported_configs_range = device
             .supported_output_configs()
             .expect("error while querying configs");
 
         let fmt;
         let supported_config = {
-            let mut cfg = supported_configs_range.next().unwrap();
-
-            while cfg.channels() != 2 {
-                cfg = supported_configs_range.next().unwrap();
-            }
+            let cfg = supported_configs_range
+                .filter(|c| c.sample_format() == SampleFormat::F32)
+                .filter(|c| c.channels() == 2)
+                .next().unwrap();
 
             fmt = cfg.sample_format();
             cfg.with_sample_rate(SampleRate(48000))
@@ -40,66 +39,12 @@ impl CpalStereoSink {
         println!("config: {:?}", config);
 
         // TODO: figure out why the ringbuffer needs to be so large in order to consume audio fast enough.
-        // try using chunks with a smaller ringbuffer?
-        let (producer, mut consumer) = rtrb::RingBuffer::new(4096).split();
+        // stores two channels for ~10.67ms
+        let (producer, mut consumer) = rtrb::RingBuffer::new(512);
 
         let channels = config.channels as usize;
 
         match fmt {
-            SampleFormat::I16 => {
-                let _stream = device
-                    .build_output_stream::<i16, _, _>(
-                        &config,
-                        move |data, _| {
-                            for chunk in data.chunks_mut(channels) {
-                                let (l, r) = &consumer.pop().unwrap_or((0f32, 0f32));
-                                for (i, d) in chunk.iter_mut().enumerate() {
-                                    if i % 2 == 0 {
-                                        *d = Sample::from(l);
-                                    } else {
-                                        *d = Sample::from(r);
-                                    }
-                                }
-                            }
-                        },
-                        move |err| {
-                            println!("{:?}", err);
-                        },
-                    )
-                    .expect("you were fucked from the start.");
-
-                Self {
-                    _stream,
-                    buffer: producer,
-                }
-            }
-            SampleFormat::U16 => {
-                let _stream = device
-                    .build_output_stream::<u16, _, _>(
-                        &config,
-                        move |data, _| {
-                            for chunk in data.chunks_mut(channels) {
-                                let (l, r) = &consumer.pop().unwrap_or((0f32, 0f32));
-                                for (i, d) in chunk.iter_mut().enumerate() {
-                                    if i % 2 == 0 {
-                                        *d = Sample::from(l);
-                                    } else {
-                                        *d = Sample::from(r);
-                                    }
-                                }
-                            }
-                        },
-                        move |err| {
-                            println!("{:?}", err);
-                        },
-                    )
-                    .expect("you were fucked from the start.");
-
-                Self {
-                    _stream,
-                    buffer: producer,
-                }
-            }
             SampleFormat::F32 => {
                 let _stream = device
                     .build_output_stream::<f32, _, _>(
@@ -109,9 +54,9 @@ impl CpalStereoSink {
                                 let (l, r) = &consumer.pop().unwrap_or((0f32, 0f32));
                                 for (i, d) in chunk.iter_mut().enumerate() {
                                     if i % 2 == 0 {
-                                        *d = Sample::from(l);
+                                        *d = Sample::from_sample(*l);
                                     } else {
-                                        *d = Sample::from(r);
+                                        *d = Sample::from_sample(*r);
                                     }
                                 }
                             }
@@ -119,6 +64,7 @@ impl CpalStereoSink {
                         move |err| {
                             println!("{:?}", err);
                         },
+                        None
                     )
                     .expect("you were fucked from the start.");
 
@@ -127,6 +73,7 @@ impl CpalStereoSink {
                     buffer: producer,
                 }
             }
+            _  => {println!("{fmt}"); todo!("more types")}
         }
     }
 }
@@ -137,8 +84,8 @@ impl AudioNode for CpalStereoSink {
             panic!("a sink can only have one input. try mixing first.")
         }
 
-        let buffers = inputs.first().unwrap().buffers();
-        for (&l, &r) in buffers[0].iter().zip(buffers[1].iter()) {
+        let stereo_channels = inputs.first().unwrap().buffers();
+        for (&l, &r) in stereo_channels[0].iter().zip(stereo_channels[1].iter()) {
             self.buffer.push((l, r)).expect("👀");
         }
 

@@ -1,12 +1,12 @@
 use crate::nodes::source::BufferedOggError::{IoErr, VorbisErr};
 use crate::AudioNode;
-use dasp_graph::{Buffer, Input, Node};
+use dasp_graph::{Buffer, Input};
 use lewton::inside_ogg::OggStreamReader;
 use lewton::VorbisError;
-use std::collections::VecDeque;
+
 use std::fs::File;
 use std::io::Error;
-use std::path::Path;
+
 use std::rc::Rc;
 
 pub struct BufferedOgg {
@@ -15,6 +15,7 @@ pub struct BufferedOgg {
     channels: usize,
 }
 
+#[derive(Debug)]
 pub enum BufferedOggError {
     VorbisErr(VorbisError),
     IoErr(std::io::Error),
@@ -43,7 +44,7 @@ impl BufferedOgg {
 
         while let Some(pck_samples) = srr.read_dec_packet_itl()? {
             for (idx, sample) in pck_samples.iter().enumerate() {
-                data[idx % 2].push(cpal::Sample::from(sample));
+                data[idx % 2].push(cpal::Sample::from_sample(*sample));
             }
         }
 

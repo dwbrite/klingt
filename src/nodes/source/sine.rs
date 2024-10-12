@@ -1,6 +1,7 @@
 use crate::AudioNode;
-use dasp_graph::{Buffer, Input, Node};
-use std::collections::VecDeque;
+use dasp_graph::{Buffer, Input};
+
+
 
 pub struct Sine {
     data: Vec<f32>,
@@ -32,25 +33,28 @@ impl Iterator for Sine {
 
     #[inline]
     fn next(&mut self) -> Option<f32> {
-        match self.data.get(self.idx) {
-            Some(v) => {
-                self.idx += 1;
-                Some(*v)
-            }
-            None => {
-                self.idx = 0;
-                self.next()
-            }
+        if let Some(&v) = self.data.get(self.idx) {
+            self.idx += 1;
+            Some(v)
+        } else {
+            self.idx = 0;
+            self.data.get(self.idx).copied()
         }
     }
 }
 
 impl AudioNode for Sine {
     fn process(&mut self, _: &[Input], output: &mut [Buffer]) {
-        for buffer in output.iter_mut() {
-            for sample in buffer.iter_mut() {
-                *sample = self.next().unwrap();
-            }
+        let mut outbuf = Buffer::default();
+        for sample in outbuf.iter_mut() {
+            *sample = self.next().unwrap();
         }
+        // println!("{:?}", outbuf);
+
+        for buffer in output.iter_mut() {
+            *buffer = outbuf.clone();
+        }
+
+        // println!("out:{:?}", output);
     }
 }
