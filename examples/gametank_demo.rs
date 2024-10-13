@@ -6,9 +6,14 @@ use std::collections::VecDeque;
 
 use std::thread::sleep;
 use std::time::Duration;
+use cpal::BufferSize::Fixed;
+use cpal::SampleRate;
+use dasp_frame::Frame;
 use dasp_graph::{Buffer, Input, NodeData};
 use dasp_interpolate::linear::Linear;
 use dasp_interpolate::sinc::Sinc;
+use dasp_ring_buffer::Slice;
+use dasp_sample::FromSample;
 use dasp_signal::interpolate::Converter;
 use dasp_signal::{rate, Signal};
 use petgraph::graph::NodeIndex;
@@ -22,7 +27,34 @@ use klingt::nodes::effect::SlewLimiter;
 
 use itertools::*;
 
+pub struct GameTankSignal {
+    buffer: Consumer<u8>,
+}
 
+impl GameTankSignal {
+    pub fn new(buffer: Consumer<u8>) -> Self {
+        Self {
+            buffer,
+        }
+    }
+}
+
+impl Signal for GameTankSignal {
+    type Frame = f32;
+
+    fn next(&mut self) -> Self::Frame {
+        if let Ok(sample) = self.buffer.pop() {
+            (sample as f32 / 255.0) * 2.0 - 1.0
+        } else {
+            println!("FEED THE BUFFFEERRRRRR");
+            0.0
+        }
+    }
+
+    fn is_exhausted(&self) -> bool {
+        self.buffer.slots() < 64
+    }
+}
 
 
 #[derive(Debug)]
@@ -32,21 +64,14 @@ pub struct RtrbSource {
 
 #[derive()]
 pub struct GameTankAudio {
-    input_buffer: Consumer<u8>, // ring buffer for GameTank samples, can be updated async/across-threads
     input_producer: Producer<u8>,
-
     resampled: VecDeque<f32>,
-    last_sample: f32,
 
     output_queue: Producer<Buffer>, // ring buffer for output buffers
-    // augmented output for accuracy
 
-
-    // queued_samples: VecDeque<f32>,
-    //setup
     sample_rate: f64,
     target_sample_rate: f64,
-    converter: Converter<dasp_signal::FromIterator<std::vec::IntoIter<f32>>, Linear<f32>>, // Converter to handle sample rate change
+    converter: Box<dyn Signal<Frame = f32> + Send>,
 }
 
 impl GameTankAudio {
@@ -54,60 +79,23 @@ impl GameTankAudio {
         let (input_producer, input_buffer) = RingBuffer::<u8>::new(512); // Ring buffer to hold GameTank samples
         let (output_producer, output_consumer) = RingBuffer::<Buffer>::new(32); // Ring buffer to hold output buffers
         let interp = Linear::new(0.0, 0.0);
-        let signal = dasp_signal::from_iter(Vec::<f32>::new().into_iter()); // Placeholder empty signal
-        let converter = Converter::from_hz_to_hz(signal, interp, sample_rate, target_sample_rate);
+        let mut signal = GameTankSignal::new(input_buffer);
+        let converter = signal.from_hz_to_hz(interp, sample_rate, target_sample_rate);
 
         (
             Self {
-                input_buffer,
                 input_producer,
                 resampled: VecDeque::with_capacity(1024),
                 output_queue: output_producer,
-                // output_buffer: output_consumer,
                 sample_rate,
                 target_sample_rate,
-                converter,
-                last_sample: 0.0,
-                // queued_samples: VecDeque::with_capacity(64),
+                converter: Box::new(converter),
             },
             output_consumer
         )
     }
 
     pub fn convert_to_output_buffers(&mut self) {
-        // calculate number of src samples needed for 64 target samples at a different sample rate
-        let time_per_buffer = 64 as f64 / self.target_sample_rate; // 64 samples at 48k samples per second = 1333us
-        let samples_per_resample_buffer = (self.sample_rate * time_per_buffer).ceil() as usize; // at least 19 source samples needed
-
-        // number of buffers to output, based on how much input is queued
-        let num_buffers = self.input_buffer.slots() / samples_per_resample_buffer;
-
-        // add samples for each buffer
-        let mut samples = Vec::with_capacity(num_buffers * samples_per_resample_buffer);
-        for _ in 0..num_buffers {
-            for _ in 0..samples_per_resample_buffer {
-                if let Ok(sample) = self.input_buffer.pop() {
-                    let s = (sample as f32 / 255.0) * 2.0 - 1.0;  // Convert u8 to f32
-                    samples.push(s);
-                }
-            }
-        }
-
-        // Create a signal from the collected samples and setup the converter
-        let first_sample = self.last_sample;
-        let second_sample = samples[0];
-        self.last_sample = *samples.last().unwrap();
-
-        let signal = dasp_signal::from_iter(samples.into_iter());
-        self.converter = signal.from_hz_to_hz(
-            Linear::new(first_sample, second_sample),
-            self.sample_rate,
-            self.target_sample_rate,
-        );
-
-        let _ = self.converter.next();
-        let _ = self.resampled.pop_front();
-
         while !self.converter.is_exhausted() {
             self.resampled.push_back(self.converter.next());
         }
@@ -179,14 +167,17 @@ fn main() {
 
 
     // Generate a 130Hz sine wave at 13,982.95 Hz sample rate
-    let mut sine_wave = rate(sample_rate).const_hz(130.81).sine();
+    let mut sine_wave = rate(sample_rate).const_hz(60.0).sine();
 
     thread::spawn(move || {
         let _ = trace_span!("gta loop").enter();
         loop {
-            while gta.input_buffer.slots() < 256 {
-                let next_sample_u8 = (( sine_wave.next() + 1.0) / 2.0 * 255.0) as u8;
-                gta.input_producer.push(next_sample_u8).expect("failure.");
+            // if it's (nearly) empty, add 256 more samples
+            if gta.converter.is_exhausted() {
+                for _ in 0..256 {
+                    let next_sample_u8 = (( sine_wave.next() + 1.0) / 2.0 * 255.0) as u8;
+                    gta.input_producer.push(next_sample_u8).expect("failure.");
+                }
             }
             gta.convert_to_output_buffers();
 
@@ -214,14 +205,14 @@ fn main() {
         }
 
         // Generate buffers in a loop
-        let mut can_output = get_sink_mono(&klingt, idx_out).buffer.slots() >= 256 && ready_to_output >= 4;
+        let mut can_output = get_sink_mono(&klingt, idx_out).buffer.slots() >= 64 && ready_to_output >= 4;
 
         while can_output {
             klingt.processor.process(&mut klingt.graph, idx_out);
 
             if let GTNode::GameTankSource(src) = &mut klingt.index_mut(idx_in).node {
                 ready_to_output = src.output_buffer.slots();
-                can_output = get_sink_mono(&klingt, idx_out).buffer.slots() >= 256 && ready_to_output >= 4;
+                can_output = get_sink_mono(&klingt, idx_out).buffer.slots() >= 64 && ready_to_output >= 4;
                 sleep(Duration::from_millis(1)); // takes 1.33ms per 64 samples, so this should be safe
                 trace!("ready to output {ready_to_output}");
             }

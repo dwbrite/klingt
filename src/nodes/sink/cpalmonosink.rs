@@ -15,6 +15,7 @@ pub struct CpalMonoSink {
 impl CpalMonoSink {
     pub fn default() -> Self {
         let host = cpal::default_host();
+        println!("{:?}", cpal::available_hosts());
 
         let device = host
             .default_output_device()
@@ -37,7 +38,7 @@ impl CpalMonoSink {
         };
 
         let mut config = supported_config.config();
-        config.buffer_size = cpal::BufferSize::Fixed(256);
+        config.buffer_size = cpal::BufferSize::Fixed(64);
 
         println!("config: {:?}", config);
         // holds 512 samples, which should be about ~5 milliseconds.
