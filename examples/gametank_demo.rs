@@ -8,6 +8,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use dasp_graph::{Buffer, Input, NodeData};
 use dasp_interpolate::linear::Linear;
+use dasp_interpolate::sinc::Sinc;
 use dasp_signal::interpolate::Converter;
 use dasp_signal::{rate, Signal};
 use petgraph::graph::NodeIndex;
@@ -18,6 +19,8 @@ use tracing::{event, instrument, Level, trace, trace_span};
 use klingt::{AudioNode, Klingt};
 use klingt::nodes::sink::CpalMonoSink;
 use klingt::nodes::effect::SlewLimiter;
+
+use itertools::*;
 
 
 
@@ -32,12 +35,14 @@ pub struct GameTankAudio {
     input_buffer: Consumer<u8>, // ring buffer for GameTank samples, can be updated async/across-threads
     input_producer: Producer<u8>,
 
+    resampled: VecDeque<f32>,
+    last_sample: f32,
 
     output_queue: Producer<Buffer>, // ring buffer for output buffers
     // augmented output for accuracy
-    queued_samples: VecDeque<f32>,
-    last_sample: f32,
 
+
+    // queued_samples: VecDeque<f32>,
     //setup
     sample_rate: f64,
     target_sample_rate: f64,
@@ -46,7 +51,7 @@ pub struct GameTankAudio {
 
 impl GameTankAudio {
     pub fn new(sample_rate: f64, target_sample_rate: f64) -> (Self, Consumer<Buffer>) {
-        let (input_producer, input_buffer) = RingBuffer::<u8>::new(1024); // Ring buffer to hold GameTank samples
+        let (input_producer, input_buffer) = RingBuffer::<u8>::new(512); // Ring buffer to hold GameTank samples
         let (output_producer, output_consumer) = RingBuffer::<Buffer>::new(32); // Ring buffer to hold output buffers
         let interp = Linear::new(0.0, 0.0);
         let signal = dasp_signal::from_iter(Vec::<f32>::new().into_iter()); // Placeholder empty signal
@@ -56,13 +61,14 @@ impl GameTankAudio {
             Self {
                 input_buffer,
                 input_producer,
+                resampled: VecDeque::with_capacity(1024),
                 output_queue: output_producer,
                 // output_buffer: output_consumer,
                 sample_rate,
                 target_sample_rate,
                 converter,
                 last_sample: 0.0,
-                queued_samples: VecDeque::with_capacity(64),
+                // queued_samples: VecDeque::with_capacity(64),
             },
             output_consumer
         )
@@ -71,65 +77,55 @@ impl GameTankAudio {
     pub fn convert_to_output_buffers(&mut self) {
         // calculate number of src samples needed for 64 target samples at a different sample rate
         let time_per_buffer = 64 as f64 / self.target_sample_rate; // 64 samples at 48k samples per second = 1333us
-        let needed_samples = (self.sample_rate * time_per_buffer).ceil() as usize; // at least 19 source samples needed
+        let samples_per_resample_buffer = (self.sample_rate * time_per_buffer).ceil() as usize; // at least 19 source samples needed
 
-        // number of buffers to output
-        let num_buffers = self.input_buffer.slots() / needed_samples;
+        // number of buffers to output, based on how much input is queued
+        let num_buffers = self.input_buffer.slots() / samples_per_resample_buffer;
 
         // add samples for each buffer
-        let mut samples = Vec::with_capacity(num_buffers * needed_samples);
+        let mut samples = Vec::with_capacity(num_buffers * samples_per_resample_buffer);
         for _ in 0..num_buffers {
-            for _ in 0..needed_samples {
+            for _ in 0..samples_per_resample_buffer {
                 if let Ok(sample) = self.input_buffer.pop() {
-                    let s = (sample as f32 - 127.0) / 127.0;  // Convert u8 to f32
+                    let s = (sample as f32 / 255.0) * 2.0 - 1.0;  // Convert u8 to f32
                     samples.push(s);
-                } else {
-                    break; // Stop if we run out of input samples
                 }
             }
         }
 
-        let first_sample = self.queued_samples.pop_front().unwrap_or(self.last_sample);
-
         // Create a signal from the collected samples and setup the converter
+        let first_sample = self.last_sample;
+        let second_sample = samples[0];
+        self.last_sample = *samples.last().unwrap();
+
         let signal = dasp_signal::from_iter(samples.into_iter());
-        self.converter = Converter::from_hz_to_hz(
-            signal,
-            Linear::new(self.last_sample, first_sample),
+        self.converter = signal.from_hz_to_hz(
+            Linear::new(first_sample, second_sample),
             self.sample_rate,
             self.target_sample_rate,
         );
 
-        // Fill the output buffers
-        for _ in 0..num_buffers {
-            let mut output_buffer = Buffer::SILENT;
-            for sample in output_buffer.iter_mut() {
-                // Fill from queue first
-                if let Some(v) = self.queued_samples.pop_front() {
-                    *sample = v;
-                } else {
-                    *sample = self.converter.next();
+        let _ = self.converter.next();
+        let _ = self.resampled.pop_front();
+
+        while !self.converter.is_exhausted() {
+            self.resampled.push_back(self.converter.next());
+        }
+
+        while self.resampled.len() >= 64 {
+            if let Some(chunk) = self.resampled.drain(..64).collect::<Vec<_>>().try_into().ok() {
+                let mut buf = Buffer::SILENT;
+                for (b, v) in buf.iter_mut().zip::<[f32;64]>(chunk) {
+                    *b = v;
                 }
-                self.last_sample = *sample;
-            }
-
-            if let Err(_err) = self.output_queue.push(output_buffer) {
-                println!("Output queue filled too fast");
+                self.output_queue.push(buf).unwrap()
             }
         }
 
-        // Queue remaining samples from the converter
-        while let sample = self.converter.next() {
-            if sample == 0.0 {
-                break;
-            }
-            self.queued_samples.push_back(sample);
-        }
     }
 }
 
 impl AudioNode for RtrbSource {
-
     #[instrument]
     fn process(&mut self, _inputs: &[Input], output: &mut [Buffer]) {
         let b = match self.output_buffer.pop() {

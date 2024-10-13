@@ -80,13 +80,13 @@ impl CpalMonoSink {
         }
     }
 
-    fn print_waveline(v: f32) {
-        let max = ((v + 1.0) * 5.0) as u32;
+    pub fn print_waveline(v: f32) {
+        let max = ((v + 1.0) * 50.0) as u32;
         let stdout = io::stdout();
         let mut handle = stdout.lock();
         for i in 0..=max {
             if i == max {
-                if max == 5 {
+                if max == 50 {
                     handle.write(b"!");
                 } else {
                     handle.write(b".");
