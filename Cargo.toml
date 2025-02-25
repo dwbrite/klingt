@@ -8,9 +8,10 @@ edition = "2018"
 
 [features]
 default = []
+warn_on_empty = []
 
 [dependencies]
-cpal = { version = "0.15.3" }
+cpal = { version = "0.15.3", features = ["asio", "jack", "wasm-bindgen"] }
 lewton = "0.10.2"
 dasp_graph = { version = "0.11.0", features = ["node-sum"]}
 rtrb = "0.3.1"

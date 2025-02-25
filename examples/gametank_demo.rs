@@ -149,7 +149,6 @@ fn main() {
     let mut klingt = Klingt::<GTNode>::default();
 
     let sink = CpalMonoSink::default();
-    let slew = NodeData::new1(GTNode::SlewLimiter(SlewLimiter::new()));
     let out_node = NodeData::new1(GTNode::CpalMonoSink(sink));
 
     let sample_rate = 13982.95;
@@ -161,37 +160,29 @@ fn main() {
     let idx_out = klingt.add_node(out_node);
     let idx_in = klingt.add_node(gt_node);
 
-    let idx_fx = klingt.add_node(slew);
-    klingt.add_edge(idx_in, idx_fx, ());
-    klingt.add_edge(idx_fx, idx_out, ());
-
-
+    klingt.add_edge(idx_in, idx_out, ());
+    
     // Generate a 130Hz sine wave at 13,982.95 Hz sample rate
     let mut sine_wave = rate(sample_rate).const_hz(60.0).sine();
 
     thread::spawn(move || {
         let _ = trace_span!("gta loop").enter();
         loop {
-            // if it's (nearly) empty, add 256 more samples
+            // if it's (nearly) empty, add more samples
             if gta.converter.is_exhausted() {
-                for _ in 0..256 {
+                for _ in 0..64 {
                     let next_sample_u8 = (( sine_wave.next() + 1.0) / 2.0 * 255.0) as u8;
                     gta.input_producer.push(next_sample_u8).expect("failure.");
                 }
             }
             gta.convert_to_output_buffers();
 
-            // println!(">>\t1.) produced inputs");
-            trace!("produced 256 inputs, waiting for available slots");
-
             // slots available for writing
             // we want to wait until there are: 256*~3.5/64=~14 slots available? round to 16
             // so, if there are 16 slots available, then we can create and insert 256 samples into the input buffer, and then we wait...
-            while gta.output_queue.slots() < 16 {
-                // println!("{}", gta.output_producer.slots());
-                sleep(Duration::from_micros(200))
+            while gta.output_queue.slots() < 4 {
+                sleep(Duration::from_micros(1000))
             }
-            trace!("waiting complete, buffers available");
         }
     });
 
