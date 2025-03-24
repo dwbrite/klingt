@@ -1,20 +1,17 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 pub mod nodes;
 
-use crate::nodes::sink::{CpalMonoSink, CpalStereoSink};
-use crate::nodes::source::{BufferedOgg, Sine, Square};
+use alloc::string::String;
 
-use crate::nodes::effect::SlewLimiter;
-use dasp_graph::{Buffer, Input, NodeData, Processor};
-// pub use enum_dispatch::enum_dispatch;
-
-use dasp_graph::node::Sum;
+use dasp_graph::{NodeData, Processor};
 
 pub use dasp_graph::Node as AudioNode;
 
-use core::convert::TryInto;
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-
+use core::ops::{Deref, DerefMut};
+use hashbrown::HashMap;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 
 pub type KlingtGraph<T> = petgraph::graph::Graph<NodeData<T>, ()>;
@@ -62,6 +59,8 @@ impl <T: AudioNode> Klingt<T> {
     }
 }
 
+
+#[cfg(all(feature = "cpal_sink", feature = "vorbis_src"))]
 #[enum_delegate::implement(AudioNode,
 pub trait AudioNode {
     fn process(&mut self, inputs: &[Input], output: &mut [Buffer]);

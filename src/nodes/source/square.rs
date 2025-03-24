@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use crate::AudioNode;
 use dasp_graph::{Buffer, Input};
 
@@ -14,7 +15,7 @@ impl Square {
         let mut data = Vec::<f32>::with_capacity(total_samples);
 
         for i in 0..total_samples {
-            let pi = std::f32::consts::PI;
+            let pi = core::f32::consts::PI;
             let percent = (i as f32) / total_samples as f32;
             let rad_percent = percent * (2.0 * pi);
             let v = rad_percent.sin();

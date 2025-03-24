@@ -17,7 +17,7 @@ impl CpalStereoSink {
             .default_output_device()
             .expect("no output device available");
 
-        println!("device: {:?}", device.name().unwrap());
+        // println!("device: {:?}", device.name().unwrap());
 
         let supported_configs_range = device
             .supported_output_configs()
@@ -36,7 +36,7 @@ impl CpalStereoSink {
 
         let config = supported_config.config();
 
-        println!("config: {:?}", config);
+        // println!("config: {:?}", config);
 
         // TODO: figure out why the ringbuffer needs to be so large in order to consume audio fast enough.
         // stores two channels for ~10.67ms
@@ -62,7 +62,8 @@ impl CpalStereoSink {
                             }
                         },
                         move |err| {
-                            println!("{:?}", err);
+                            // TODO: error
+                            // println!("{:?}", err);
                         },
                         None
                     )
@@ -73,7 +74,7 @@ impl CpalStereoSink {
                     buffer: producer,
                 }
             }
-            _  => {println!("{fmt}"); todo!("more types")}
+            _  => { todo!("more types") }
         }
     }
 }
