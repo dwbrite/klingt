@@ -1,5 +1,9 @@
-mod slewlimiter;
+//! Audio effect nodes (processors with audio inputs and outputs)
 
-pub use dasp_graph::node::Sum;
+mod gain;
+mod mixer;
+mod slew_limiter;
 
-pub use slewlimiter::*;
+pub use gain::{Gain, GainMessage};
+pub use mixer::Mixer;
+pub use slew_limiter::{SlewLimiter, SlewLimiterMessage};

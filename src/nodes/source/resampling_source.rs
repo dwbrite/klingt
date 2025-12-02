@@ -6,7 +6,7 @@
 use dasp_graph::{Buffer, Input};
 use rtrb::Consumer;
 
-use crate::v2::node::{AudioNode, ProcessContext};
+use crate::node::{AudioNode, ProcessContext};
 
 /// Messages for the resampling source
 #[derive(Clone, Copy, Debug)]

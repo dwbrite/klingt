@@ -1,7 +1,7 @@
 //! Slew rate limiter effect
 
 use dasp_graph::{Buffer, Input};
-use crate::v2::node::{AudioNode, ProcessContext};
+use crate::node::{AudioNode, ProcessContext};
 
 /// Messages to control the slew limiter
 #[derive(Clone, Copy, Debug)]

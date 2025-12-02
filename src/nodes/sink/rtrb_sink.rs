@@ -3,7 +3,7 @@
 use dasp_graph::{Buffer, Input};
 use rtrb::Producer;
 
-use crate::v2::node::{AudioNode, ProcessContext};
+use crate::node::{AudioNode, ProcessContext};
 
 /// A sink that pushes audio into an rtrb ring buffer
 /// 

@@ -8,10 +8,10 @@ use hashbrown::HashMap;
 use petgraph::graph::NodeIndex;
 use rtrb::{Consumer, Producer, RingBuffer};
 
-use crate::v2::node::{AudioNode, NodeId, ProcessContext};
+use crate::node::{AudioNode, NodeId, ProcessContext};
 
-/// A handle to send messages to a node
-pub struct NodeHandle<M: Send + 'static> {
+/// Internal handle to send messages to a node in an AudioGraph
+pub(crate) struct NodeHandle<M: Send + 'static> {
     pub(crate) id: NodeId,
     pub(crate) sender: Producer<M>,
     pub(crate) _marker: PhantomData<M>,
@@ -66,7 +66,7 @@ impl dasp_graph::Node for DaspAdapter {
 type InnerGraph = petgraph::graph::Graph<NodeData<DaspAdapter>, ()>;
 
 /// An audio processing graph at a fixed sample rate
-pub struct AudioGraph {
+pub(crate) struct AudioGraph {
     graph: InnerGraph,
     processor: Processor<InnerGraph>,
     ctx: ProcessContext,

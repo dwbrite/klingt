@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use symphonium::SymphoniumLoader;
 
-use klingt::v2::Klingt;
-use klingt::v2::nodes::SamplePlayer;
+use klingt::Klingt;
+use klingt::nodes::SamplePlayer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut klingt = Klingt::default_output().ok_or("No audio device")?;
@@ -23,8 +23,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     player.set_looping(true);
     
     // add player and set primary output
-    let handle = klingt.add(player);
-    klingt.output(&handle);
+    let player_handle = klingt.add(player);
+    klingt.output(&player_handle);
+
+    
 
 
     // and main loop type shit

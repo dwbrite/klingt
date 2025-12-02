@@ -1,29 +1,57 @@
-//! Audio sample player
+//! Audio sample player.
 
 use dasp_graph::{Buffer, Input};
-use crate::v2::node::{AudioNode, ProcessContext};
+use crate::node::{AudioNode, ProcessContext};
 
-/// Messages to control a sample player
+/// Messages to control a [`SamplePlayer`].
+///
+/// Send these via [`Handle::send`](crate::Handle::send) to control playback.
 #[derive(Clone, Copy, Debug)]
 pub enum PlayerMessage {
-    /// Start or resume playback
+    /// Start or resume playback.
     Play,
-    /// Pause playback (keeps position)
+    /// Pause playback (keeps position).
     Pause,
-    /// Stop playback and reset to beginning
+    /// Stop playback and reset to beginning.
     Stop,
-    /// Set playback volume (0.0 - 2.0)
+    /// Set playback volume (0.0 to 2.0, where 1.0 is unity gain).
     SetVolume(f32),
-    /// Seek to position in seconds
+    /// Seek to position in seconds.
     Seek(f64),
-    /// Enable or disable looping
+    /// Enable or disable looping.
     SetLooping(bool),
 }
 
-/// Plays pre-decoded audio samples
-/// 
-/// For streaming large files, consider a different approach using
-/// a ring buffer fed by a decoder thread.
+/// Plays pre-decoded audio samples.
+///
+/// This node plays audio that's already been decoded into memory as f32 samples.
+/// It reports its native sample rate, so Klingt will automatically handle
+/// resampling if the output device runs at a different rate.
+///
+/// # Example
+///
+/// ```ignore
+/// use symphonium::SymphoniumLoader;
+/// use klingt::{Klingt, nodes::SamplePlayer};
+///
+/// let decoded = SymphoniumLoader::new().load_f32("music.ogg", None)?;
+/// let mut player = SamplePlayer::new(
+///     decoded.as_interleaved(),
+///     decoded.channels(),
+///     decoded.sample_rate,
+/// );
+/// player.set_looping(true);
+///
+/// let mut klingt = Klingt::default_output()?;
+/// let handle = klingt.add(player);
+/// klingt.output(&handle);
+/// ```
+///
+/// # Large Files
+///
+/// For very large files, loading everything into memory may not be ideal.
+/// Consider implementing a streaming player using a ring buffer fed by
+/// a decoder thread.
 pub struct SamplePlayer {
     samples: Vec<f32>,
     channels: usize,
@@ -35,7 +63,15 @@ pub struct SamplePlayer {
 }
 
 impl SamplePlayer {
-    /// Create a player from interleaved samples
+    /// Create a player from interleaved audio samples.
+    ///
+    /// # Arguments
+    ///
+    /// - `samples` - Interleaved audio data (L, R, L, R, ... for stereo)
+    /// - `channels` - Number of channels in the audio data
+    /// - `sample_rate` - Sample rate of the audio data in Hz
+    ///
+    /// Playback starts immediately. Use [`PlayerMessage::Pause`] to start paused.
     pub fn new(samples: Vec<f32>, channels: usize, sample_rate: u32) -> Self {
         Self {
             samples,
@@ -48,36 +84,38 @@ impl SamplePlayer {
         }
     }
 
-    /// Set looping mode
+    /// Enable or disable looping.
+    ///
+    /// When enabled, playback restarts from the beginning when it reaches the end.
     pub fn set_looping(&mut self, looping: bool) {
         self.looping = looping;
     }
 
-    /// Get the source sample rate
+    /// Get the source sample rate in Hz.
     #[inline]
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 
-    /// Get the number of channels
+    /// Get the number of audio channels.
     #[inline]
     pub fn channels(&self) -> usize {
         self.channels
     }
 
-    /// Get the duration in seconds
+    /// Get the total duration in seconds.
     #[inline]
     pub fn duration_secs(&self) -> f64 {
         (self.samples.len() / self.channels) as f64 / self.sample_rate as f64
     }
 
-    /// Get the current playback position in seconds
+    /// Get the current playback position in seconds.
     #[inline]
     pub fn position_secs(&self) -> f64 {
         (self.position / self.channels) as f64 / self.sample_rate as f64
     }
 
-    /// Check if playback is active
+    /// Check if playback is currently active.
     #[inline]
     pub fn is_playing(&self) -> bool {
         self.playing

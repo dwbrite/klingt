@@ -1,7 +1,7 @@
 //! Gain/volume control effect
 
 use dasp_graph::{Buffer, Input};
-use crate::v2::node::{AudioNode, ProcessContext};
+use crate::node::{AudioNode, ProcessContext};
 
 /// Messages to control gain
 #[derive(Clone, Copy, Debug)]

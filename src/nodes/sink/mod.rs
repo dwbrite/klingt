@@ -1,15 +1,11 @@
+//! Audio sink nodes (outputs with no audio outputs)
 
-#[cfg(all(feature = "cpal_sink", feature = "std"))]
-mod cpalmonosink;
+mod rtrb_sink;
 
-#[cfg(all(feature = "cpal_sink", feature = "std"))]
-mod cpalstereosink;
+#[cfg(feature = "cpal_sink")]
+mod cpal_sink;
 
-#[cfg(all(feature = "cpal_sink", feature = "std"))]
-pub use cpalmonosink::*;
+pub use rtrb_sink::RtrbSink;
 
-#[cfg(all(feature = "cpal_sink", feature = "std"))]
-pub use cpalstereosink::*;
-
-mod rtrbsink;
-pub use rtrbsink::*;
+#[cfg(feature = "cpal_sink")]
+pub use cpal_sink::CpalSink;
