@@ -61,9 +61,8 @@ impl CpalStereoSink {
                                 }
                             }
                         },
-                        move |err| {
-                            // TODO: error
-                            // println!("{:?}", err);
+                        move |_err| {
+                            // TODO: handle error
                         },
                         None
                     )

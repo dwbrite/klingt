@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod nodes;
+pub mod v2;  // New API
 
 use alloc::string::String;
 
@@ -52,10 +53,6 @@ impl <T: AudioNode> DerefMut for Klingt<T> {
 impl <T: AudioNode> Klingt<T> {
     pub fn process_to_idx(&mut self, idx: NodeIndex) {
         self.processor.process(&mut self.graph, idx)
-    }
-    
-    pub fn process_to_node(&mut self) {
-    //     
     }
 }
 
