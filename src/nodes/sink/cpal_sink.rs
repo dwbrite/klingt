@@ -102,10 +102,11 @@ fn build_stream(
             move |data: &mut [f32], _| {
                 let mut underrun = false;
                 for sample in data.iter_mut() {
-                    *sample = consumer.pop().unwrap_or_else(|_| {
+                    let s = consumer.pop().unwrap_or_else(|_| {
                         underrun = true;
                         0.0
                     });
+                    *sample = s.clamp(-1.0, 1.0);
                 }
                 if underrun {
                     had_underrun.store(true, Ordering::Relaxed);

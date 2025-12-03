@@ -21,6 +21,7 @@ impl<M: Send + 'static> NodeHandle<M> {
     /// Send a message to the node (applied next process cycle)
     /// 
     /// Returns Err if the queue is full (message dropped)
+    #[allow(dead_code)]
     pub fn send(&mut self, msg: M) -> Result<(), M> {
         self.sender.push(msg).map_err(|rtrb::PushError::Full(v)| v)
     }
@@ -42,12 +43,13 @@ struct NodeWrapper<N: AudioNode> {
 
 impl<N: AudioNode> ErasedNode for NodeWrapper<N> {
     fn process_erased(&mut self, ctx: &ProcessContext, inputs: &[Input], outputs: &mut [Buffer]) {
-        // Collect messages first to avoid borrow issues
-        let mut msgs = alloc::vec::Vec::new();
-        while let Ok(msg) = self.receiver.pop() {
-            msgs.push(msg);
-        }
-        self.node.process(ctx, msgs.into_iter(), inputs, outputs);
+        // Split borrow to avoid conflict between receiver and node
+        let receiver = &mut self.receiver;
+        let node = &mut self.node;
+        
+        // Create a draining iterator directly from the consumer - no allocation!
+        let messages = core::iter::from_fn(|| receiver.pop().ok());
+        node.process(ctx, messages, inputs, outputs);
     }
 }
 
@@ -93,6 +95,7 @@ impl AudioGraph {
         }
     }
     
+    #[allow(dead_code)]
     pub fn sample_rate(&self) -> u32 {
         self.ctx.sample_rate
     }

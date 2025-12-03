@@ -1,11 +1,16 @@
 [package]
 name = "klingt"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Devin Brite <devin@dwbrite.com>"]
 edition = "2018"
 
-description = "klingt audio graph library?"
+description = "Lock-free audio graph library with message-passing parameter control"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/dwbrite/klingt"
+documentation = "https://docs.rs/klingt"
+keywords = ["audio", "dsp", "graph", "sound", "music"]
+categories = ["multimedia::audio", "game-development"]
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -55,4 +60,8 @@ required-features = ["cpal_sink"]
 
 [[example]]
 name = "audio_player"
+required-features = ["cpal_sink"]
+
+[[example]]
+name = "custom_node"
 required-features = ["cpal_sink"]

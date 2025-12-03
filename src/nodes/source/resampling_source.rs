@@ -104,12 +104,10 @@ impl AudioNode for ResamplingSource {
         let buffer_len = outputs[0].len();
 
         // Prime the interpolator if needed
-        if !self.primed {
+        if !self.primed && self.read_frame() {
+            self.advance_frame();
             if self.read_frame() {
-                self.advance_frame();
-                if self.read_frame() {
-                    self.primed = true;
-                }
+                self.primed = true;
             }
         }
 

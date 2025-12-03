@@ -179,8 +179,7 @@
 //!
 //! ## Design Principles
 //!
-//! - **Lock-free audio thread**: No `Arc`, no `Mutex` on the hot path
-//! - **Message passing**: Parameters sent via ring buffers, not shared state
+//! - **Lock-free audio thread**: No allocations, no `Arc`/`Mutex` on the hot path
 //! - **Automatic resampling**: Nodes at different sample rates just work
 //! - **Fixed block size**: 64 samples per block (from dasp_graph)
 
