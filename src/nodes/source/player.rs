@@ -1,5 +1,6 @@
 //! Audio sample player.
 
+use alloc::vec::Vec;
 use dasp_graph::{Buffer, Input};
 use crate::node::{AudioNode, ProcessContext};
 
