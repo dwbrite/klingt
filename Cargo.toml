@@ -1,6 +1,6 @@
 [package]
 name = "klingt"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Devin Brite <devin@dwbrite.com>"]
 edition = "2018"
 

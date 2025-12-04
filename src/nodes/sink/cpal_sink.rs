@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{SampleFormat, SupportedStreamConfig};
 use dasp_graph::{Buffer, Input};
 use rtrb::{Consumer, Producer, RingBuffer};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::node::{AudioNode, ProcessContext};
@@ -88,6 +88,18 @@ impl CpalSink {
     }
 }
 
+/// Helper to store f32 in AtomicU32
+#[inline]
+fn f32_to_bits(f: f32) -> u32 {
+    f.to_bits()
+}
+
+/// Helper to load f32 from AtomicU32
+#[inline]
+fn bits_to_f32(bits: u32) -> f32 {
+    f32::from_bits(bits)
+}
+
 fn build_stream(
     device: &cpal::Device,
     sample_format: SampleFormat,
@@ -96,64 +108,95 @@ fn build_stream(
     samples_consumed: Arc<AtomicUsize>,
     had_underrun: Arc<AtomicBool>,
 ) -> Result<cpal::Stream, cpal::BuildStreamError> {
+    // Shared last sample for smooth underrun handling (avoids pops)
+    let last_sample = Arc::new(AtomicU32::new(f32_to_bits(0.0)));
+
     match sample_format {
-        SampleFormat::F32 => device.build_output_stream(
-            stream_config,
-            move |data: &mut [f32], _| {
-                let mut underrun = false;
-                for sample in data.iter_mut() {
-                    let s = consumer.pop().unwrap_or_else(|_| {
-                        underrun = true;
-                        0.0
-                    });
-                    *sample = s.clamp(-1.0, 1.0);
-                }
-                if underrun {
-                    had_underrun.store(true, Ordering::Relaxed);
-                }
-                samples_consumed.fetch_add(data.len(), Ordering::Relaxed);
-            },
-            |err| eprintln!("CPAL stream error: {:?}", err),
-            None,
-        ),
-        SampleFormat::I16 => device.build_output_stream(
-            stream_config,
-            move |data: &mut [i16], _| {
-                let mut underrun = false;
-                for sample in data.iter_mut() {
-                    let s = consumer.pop().unwrap_or_else(|_| {
-                        underrun = true;
-                        0.0
-                    });
-                    *sample = (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
-                }
-                if underrun {
-                    had_underrun.store(true, Ordering::Relaxed);
-                }
-                samples_consumed.fetch_add(data.len(), Ordering::Relaxed);
-            },
-            |err| eprintln!("CPAL stream error: {:?}", err),
-            None,
-        ),
-        SampleFormat::U16 => device.build_output_stream(
-            stream_config,
-            move |data: &mut [u16], _| {
-                let mut underrun = false;
-                for sample in data.iter_mut() {
-                    let s = consumer.pop().unwrap_or_else(|_| {
-                        underrun = true;
-                        0.0
-                    });
-                    *sample = ((s.clamp(-1.0, 1.0) + 1.0) * 0.5 * u16::MAX as f32) as u16;
-                }
-                if underrun {
-                    had_underrun.store(true, Ordering::Relaxed);
-                }
-                samples_consumed.fetch_add(data.len(), Ordering::Relaxed);
-            },
-            |err| eprintln!("CPAL stream error: {:?}", err),
-            None,
-        ),
+        SampleFormat::F32 => {
+            let last_sample = last_sample.clone();
+            device.build_output_stream(
+                stream_config,
+                move |data: &mut [f32], _| {
+                    let mut underrun = false;
+                    for sample in data.iter_mut() {
+                        let s = match consumer.pop() {
+                            Ok(v) => {
+                                last_sample.store(f32_to_bits(v), Ordering::Relaxed);
+                                v
+                            }
+                            Err(_) => {
+                                underrun = true;
+                                // Hold last sample to avoid pops
+                                bits_to_f32(last_sample.load(Ordering::Relaxed))
+                            }
+                        };
+                        *sample = s.clamp(-1.0, 1.0);
+                    }
+                    if underrun {
+                        had_underrun.store(true, Ordering::Relaxed);
+                    }
+                    samples_consumed.fetch_add(data.len(), Ordering::Relaxed);
+                },
+                |err| eprintln!("CPAL stream error: {:?}", err),
+                None,
+            )
+        }
+        SampleFormat::I16 => {
+            let last_sample = last_sample.clone();
+            device.build_output_stream(
+                stream_config,
+                move |data: &mut [i16], _| {
+                    let mut underrun = false;
+                    for sample in data.iter_mut() {
+                        let s = match consumer.pop() {
+                            Ok(v) => {
+                                last_sample.store(f32_to_bits(v), Ordering::Relaxed);
+                                v
+                            }
+                            Err(_) => {
+                                underrun = true;
+                                bits_to_f32(last_sample.load(Ordering::Relaxed))
+                            }
+                        };
+                        *sample = (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                    }
+                    if underrun {
+                        had_underrun.store(true, Ordering::Relaxed);
+                    }
+                    samples_consumed.fetch_add(data.len(), Ordering::Relaxed);
+                },
+                |err| eprintln!("CPAL stream error: {:?}", err),
+                None,
+            )
+        }
+        SampleFormat::U16 => {
+            let last_sample = last_sample.clone();
+            device.build_output_stream(
+                stream_config,
+                move |data: &mut [u16], _| {
+                    let mut underrun = false;
+                    for sample in data.iter_mut() {
+                        let s = match consumer.pop() {
+                            Ok(v) => {
+                                last_sample.store(f32_to_bits(v), Ordering::Relaxed);
+                                v
+                            }
+                            Err(_) => {
+                                underrun = true;
+                                bits_to_f32(last_sample.load(Ordering::Relaxed))
+                            }
+                        };
+                        *sample = ((s.clamp(-1.0, 1.0) + 1.0) * 0.5 * u16::MAX as f32) as u16;
+                    }
+                    if underrun {
+                        had_underrun.store(true, Ordering::Relaxed);
+                    }
+                    samples_consumed.fetch_add(data.len(), Ordering::Relaxed);
+                },
+                |err| eprintln!("CPAL stream error: {:?}", err),
+                None,
+            )
+        }
         _ => panic!("Unsupported sample format: {:?}", sample_format),
     }
 }
